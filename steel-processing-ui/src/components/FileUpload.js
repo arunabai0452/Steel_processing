@@ -8,25 +8,69 @@ import {
     Alert,
     Chip,
     Container,
+    Stack,
+    List,
+    ListItem,
+    ListItemText,
+    ListItemIcon,
 } from "@mui/material";
-import { CloudUpload, CheckCircle } from "@mui/icons-material";
+import { 
+    CloudUpload, 
+    CheckCircle, 
+    InsertDriveFile,
+    Info,
+    Timer,
+    Storage as StorageIcon,
+} from "@mui/icons-material";
 import { restoreDB } from "../api/api";
 
-const FileUpload = ({ credentials, onDBCreated }) => {
+const FileUpload = ({ credentials, onUploadSuccess, onSkipToVersionSelector }) => {
     const [file, setFile] = useState(null);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState("");
     const [progress, setProgress] = useState(0);
+    const [dragActive, setDragActive] = useState(false);
 
-    const handleFileChange = (e) => {
-        const selectedFile = e.target.files[0];
+    const handleFileChange = (selectedFile) => {
         if (selectedFile) {
             if (!selectedFile.name.endsWith(".bacpac")) {
                 setError("Please select a .bacpac file");
                 return;
             }
+            
+            // Check file size (warn if > 500MB)
+            const maxSize = 500 * 1024 * 1024; // 500MB
+            if (selectedFile.size > maxSize) {
+                setError(`File size exceeds 500MB. Large files may take longer to upload.`);
+            }
+            
             setFile(selectedFile);
             setError("");
+        }
+    };
+
+    const handleInputChange = (e) => {
+        const selectedFile = e.target.files[0];
+        handleFileChange(selectedFile);
+    };
+
+    const handleDrag = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (e.type === "dragenter" || e.type === "dragover") {
+            setDragActive(true);
+        } else if (e.type === "dragleave") {
+            setDragActive(false);
+        }
+    };
+
+    const handleDrop = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setDragActive(false);
+        
+        if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+            handleFileChange(e.dataTransfer.files[0]);
         }
     };
 
@@ -59,7 +103,7 @@ const FileUpload = ({ credentials, onDBCreated }) => {
             );
             setProgress(100);
             setTimeout(() => {
-                onDBCreated(response.data.db_name);
+                onUploadSuccess();
             }, 500);
         } catch (err) {
             clearInterval(progressInterval);
@@ -68,6 +112,14 @@ const FileUpload = ({ credentials, onDBCreated }) => {
         } finally {
             setLoading(false);
         }
+    };
+
+    const formatFileSize = (bytes) => {
+        if (bytes === 0) return '0 Bytes';
+        const k = 1024;
+        const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+        const i = Math.floor(Math.log(bytes) / Math.log(k));
+        return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
     };
 
     return (
@@ -106,21 +158,26 @@ const FileUpload = ({ credentials, onDBCreated }) => {
                     </Typography>
 
                     {error && (
-                        <Alert severity="error" sx={{ mb: 3 }}>
+                        <Alert severity="error" sx={{ mb: 3 }} onClose={() => setError("")}>
                             {error}
                         </Alert>
                     )}
 
                     <Box
+                        onDragEnter={handleDrag}
+                        onDragLeave={handleDrag}
+                        onDragOver={handleDrag}
+                        onDrop={handleDrop}
                         sx={{
-                            border: "2px dashed #667eea",
+                            border: dragActive ? "3px solid #667eea" : "2px dashed #667eea",
                             borderRadius: 2,
                             p: 4,
                             textAlign: "center",
-                            backgroundColor: file ? "#f0f4ff" : "#fafafa",
+                            backgroundColor: file ? "#f0f4ff" : dragActive ? "#e8f0ff" : "#fafafa",
                             transition: "all 0.3s",
+                            cursor: loading ? "not-allowed" : "pointer",
                             "&:hover": {
-                                backgroundColor: "#f0f4ff",
+                                backgroundColor: loading ? "#fafafa" : "#f0f4ff",
                                 borderColor: "#764ba2",
                             },
                         }}
@@ -130,45 +187,107 @@ const FileUpload = ({ credentials, onDBCreated }) => {
                             style={{ display: "none" }}
                             id="file-upload"
                             type="file"
-                            onChange={handleFileChange}
+                            onChange={handleInputChange}
                             disabled={loading}
                         />
-                        <label htmlFor="file-upload">
-                            <Button
-                                component="span"
-                                variant="outlined"
-                                startIcon={<CloudUpload />}
-                                size="large"
-                                disabled={loading}
-                                sx={{ mb: 2 }}
-                            >
-                                Choose File
-                            </Button>
-                        </label>
-
-                        {file && (
-                            <Box mt={2}>
+                        
+                        {!file ? (
+                            <>
+                                <CloudUpload sx={{ fontSize: 60, color: "#667eea", mb: 2 }} />
+                                <Typography variant="h6" gutterBottom>
+                                    Drag & Drop your .bacpac file here
+                                </Typography>
+                                <Typography variant="body2" color="text.secondary" mb={2}>
+                                    or
+                                </Typography>
+                                <label htmlFor="file-upload">
+                                    <Button
+                                        component="span"
+                                        variant="outlined"
+                                        startIcon={<InsertDriveFile />}
+                                        size="large"
+                                        disabled={loading}
+                                    >
+                                        Browse Files
+                                    </Button>
+                                </label>
+                            </>
+                        ) : (
+                            <Box>
+                                <CheckCircle sx={{ fontSize: 60, color: "#4caf50", mb: 2 }} />
                                 <Chip
-                                    icon={<CheckCircle />}
+                                    icon={<InsertDriveFile />}
                                     label={file.name}
                                     color="primary"
-                                    sx={{ fontSize: "1rem", py: 2.5, px: 1 }}
+                                    sx={{ fontSize: "1rem", py: 2.5, px: 1, mb: 2 }}
                                 />
-                                <Typography variant="caption" display="block" mt={1}>
-                                    {(file.size / (1024 * 1024)).toFixed(2)} MB
+                                <Typography variant="body2" color="text.secondary" mb={2}>
+                                    Size: {formatFileSize(file.size)}
                                 </Typography>
+                                <label htmlFor="file-upload">
+                                    <Button
+                                        component="span"
+                                        variant="text"
+                                        size="small"
+                                        disabled={loading}
+                                    >
+                                        Change File
+                                    </Button>
+                                </label>
                             </Box>
                         )}
                     </Box>
+
+                    {/* Upload Information */}
+                    <Paper elevation={1} sx={{ p: 2, mt: 3, bgcolor: "#f5f5f5" }}>
+                        <Stack direction="row" spacing={1} alignItems="center" mb={1}>
+                            <Info color="primary" fontSize="small" />
+                            <Typography variant="subtitle2" fontWeight="bold">
+                                What happens during upload:
+                            </Typography>
+                        </Stack>
+                        <List dense>
+                            <ListItem>
+                                <ListItemIcon>
+                                    <StorageIcon fontSize="small" color="action" />
+                                </ListItemIcon>
+                                <ListItemText 
+                                    primary="Database will be automatically named with timestamp"
+                                    secondary="Format: SteelProcessing_YYYYMMDD_HHMMSS"
+                                />
+                            </ListItem>
+                            <ListItem>
+                                <ListItemIcon>
+                                    <Timer fontSize="small" color="action" />
+                                </ListItemIcon>
+                                <ListItemText 
+                                    primary="Restore process may take several minutes"
+                                    secondary="Larger files require more time"
+                                />
+                            </ListItem>
+                        </List>
+                    </Paper>
 
                     {loading && (
                         <Box sx={{ mt: 3 }}>
                             <LinearProgress
                                 variant="determinate"
                                 value={progress}
-                                sx={{ height: 8, borderRadius: 4 }}
+                                sx={{ 
+                                    height: 10, 
+                                    borderRadius: 5,
+                                    bgcolor: "#e0e0e0",
+                                    "& .MuiLinearProgress-bar": {
+                                        background: "linear-gradient(90deg, #667eea 0%, #764ba2 100%)",
+                                    }
+                                }}
                             />
-                            <Typography variant="body2" color="text.secondary" mt={1}>
+                            <Typography 
+                                variant="body2" 
+                                color="text.secondary" 
+                                textAlign="center"
+                                mt={1}
+                            >
                                 Restoring database... {progress}%
                             </Typography>
                         </Box>
@@ -180,16 +299,38 @@ const FileUpload = ({ credentials, onDBCreated }) => {
                         size="large"
                         onClick={handleUpload}
                         disabled={!file || loading}
+                        startIcon={loading ? null : <CloudUpload />}
                         sx={{
                             mt: 3,
                             py: 1.5,
                             background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
                             fontWeight: "bold",
                             fontSize: "1rem",
+                            "&:hover": {
+                                background: "linear-gradient(135deg, #5568d3 0%, #653a8b 100%)",
+                            },
                         }}
                     >
-                        {loading ? "Restoring..." : "Restore Database"}
+                        {loading ? `Restoring... ${progress}%` : "Restore Database"}
                     </Button>
+
+                    {/* Skip button - only show if callback is provided */}
+                    {onSkipToVersionSelector && (
+                        <Button
+                            variant="text"
+                            fullWidth
+                            size="large"
+                            onClick={onSkipToVersionSelector}
+                            disabled={loading}
+                            sx={{
+                                mt: 2,
+                                textTransform: "none",
+                                color: "#667eea",
+                            }}
+                        >
+                            Skip and use existing databases
+                        </Button>
+                    )}
                 </Paper>
             </Container>
         </Box>

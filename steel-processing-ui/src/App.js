@@ -2,55 +2,57 @@ import React, { useState } from "react";
 import Login from "./components/Login";
 import FileUpload from "./components/FileUpload";
 import VersionSelector from "./components/VersionSelector";
-import { ThemeProvider, createTheme } from "@mui/material/styles";
-import CssBaseline from "@mui/material/CssBaseline";
-
-const theme = createTheme({
-    palette: {
-        primary: {
-            main: "#667eea",
-        },
-        secondary: {
-            main: "#764ba2",
-        },
-    },
-    typography: {
-        fontFamily: '"Inter", "Roboto", "Helvetica", "Arial", sans-serif',
-    },
-    components: {
-        MuiButton: {
-            styleOverrides: {
-                root: {
-                    textTransform: "none",
-                    borderRadius: 8,
-                },
-            },
-        },
-        MuiPaper: {
-            styleOverrides: {
-                root: {
-                    borderRadius: 12,
-                },
-            },
-        },
-    },
-});
 
 function App() {
+    const [currentStep, setCurrentStep] = useState("login"); // login, upload, version-selector
     const [credentials, setCredentials] = useState(null);
-    const [dbCreated, setDbCreated] = useState(null);
+
+    // Handle login - proceed to upload page
+    const handleLogin = (creds) => {
+        setCredentials(creds);
+        setCurrentStep("upload");
+    };
+
+    // Handle skip to version selector - skip upload page
+    const handleSkipToVersionSelector = (creds) => {
+        setCredentials(creds);
+        setCurrentStep("version-selector");
+    };
+
+    // Handle upload success - move to version selector
+    const handleUploadSuccess = () => {
+        setCurrentStep("version-selector");
+    };
+
+    // Handle logout / back to login
+    const handleLogout = () => {
+        setCredentials(null);
+        setCurrentStep("login");
+    };
 
     return (
-        <ThemeProvider theme={theme}>
-            <CssBaseline />
-            {!credentials && <Login onLogin={setCredentials} />}
-            {credentials && !dbCreated && (
-                <FileUpload credentials={credentials} onDBCreated={setDbCreated} />
+        <div className="App">
+            {currentStep === "login" && (
+                <Login
+                    onLogin={handleLogin}
+                    onSkipToVersionSelector={handleSkipToVersionSelector}
+                />
             )}
-            {credentials && dbCreated && (
-                <VersionSelector credentials={credentials} />
+
+            {currentStep === "upload" && credentials && (
+                <FileUpload
+                    credentials={credentials}
+                    onUploadSuccess={handleUploadSuccess}
+                    onSkipToVersionSelector={() => handleSkipToVersionSelector(credentials)}
+                />
             )}
-        </ThemeProvider>
+
+            {currentStep === "version-selector" && credentials && (
+                <VersionSelector
+                    credentials={credentials}
+                />
+            )}
+        </div>
     );
 }
 
